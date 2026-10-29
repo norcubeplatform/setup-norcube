@@ -33,7 +33,8 @@ jobs:
           test -n "${{ steps.nrc.outputs.version }}"
           case "${{ matrix.version }}" in
             latest) ;;
-            *) norcube --version | grep -q "${{ matrix.version }}" ;;
+            # The CLI prints its version without the leading "v".
+            *) v="${{ matrix.version }}"; norcube --version | grep -qF "version ${v#v} " ;;
           esac
       - name: A second run reuses the tool cache
         uses: ./
