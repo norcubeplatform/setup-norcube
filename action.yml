@@ -41,15 +41,15 @@ runs:
           Linux) os=linux ext=tar.gz ;;
           macOS) os=darwin ext=tar.gz ;;
           Windows) os=windows ext=zip ;;
-          *) echo "::error::setup-nrc: unsupported runner OS $RUNNER_OS"; exit 1 ;;
+          *) echo "::error::setup-norcube: unsupported runner OS $RUNNER_OS"; exit 1 ;;
         esac
         case "$RUNNER_ARCH" in
           X64) arch=amd64 ;;
           ARM64) arch=arm64 ;;
-          *) echo "::error::setup-nrc: unsupported runner architecture $RUNNER_ARCH"; exit 1 ;;
+          *) echo "::error::setup-norcube: unsupported runner architecture $RUNNER_ARCH"; exit 1 ;;
         esac
         if [ "$os" = windows ] && [ "$arch" != amd64 ]; then
-          echo "::error::setup-nrc: Windows builds are amd64 only"; exit 1
+          echo "::error::setup-norcube: Windows builds are amd64 only"; exit 1
         fi
 
         # "latest" follows the release redirect; no API call, no token needed.
@@ -60,7 +60,7 @@ runs:
         fi
         case "$version" in v*) ;; *) version="v$version" ;; esac
         if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
-          echo "::error::setup-nrc: \"$INPUT_VERSION\" is not a version (use latest or vX.Y.Z)"; exit 1
+          echo "::error::setup-norcube: \"$INPUT_VERSION\" is not a version (use latest or vX.Y.Z)"; exit 1
         fi
 
         dir="$RUNNER_TOOL_CACHE/norcube/${version#v}/$arch"
@@ -76,7 +76,7 @@ runs:
           # published SHA-256.
           want=$(awk -v f="$archive" '$2 == f { print $1 }' "$tmp/checksums.txt")
           if [ -z "$want" ]; then
-            echo "::error::setup-nrc: $archive is not listed in checksums.txt of $version"; exit 1
+            echo "::error::setup-norcube: $archive is not listed in checksums.txt of $version"; exit 1
           fi
           if command -v sha256sum >/dev/null; then
             got=$(sha256sum "$tmp/$archive" | awk '{print $1}')
@@ -84,7 +84,7 @@ runs:
             got=$(shasum -a 256 "$tmp/$archive" | awk '{print $1}')
           fi
           if [ "$got" != "$want" ]; then
-            echo "::error::setup-nrc: checksum mismatch for $archive (got $got, want $want)"; exit 1
+            echo "::error::setup-norcube: checksum mismatch for $archive (got $got, want $want)"; exit 1
           fi
 
           mkdir -p "$dir"
@@ -118,7 +118,7 @@ runs:
         echo "::add-mask::$TOKEN"
         case "$TOKEN" in
           nrc_ci_*) ;;
-          *) echo "::warning::setup-nrc: the token doesn't look like a Norcube CI token (nrc_ci_…); create one with \`nrc auth ci-token create\` or under IAM › CI tokens." ;;
+          *) echo "::warning::setup-norcube: the token doesn't look like a Norcube CI token (nrc_ci_…); create one with \`nrc auth ci-token create\` or under IAM › CI tokens." ;;
         esac
         {
           delim="NORCUBE_$(openssl rand -hex 8 2>/dev/null || echo $RANDOM$RANDOM)"

@@ -1,11 +1,11 @@
-# setup-nrc
+# setup-norcube
 
 Install the [Norcube CLI](https://github.com/norcubeplatform/cli) (`norcube`,
 alias `nrc`) in a GitHub Actions job, verified against the release's
 checksums, and optionally give it a CI token.
 
 ```yaml
-- uses: norcubeplatform/setup-nrc@v1
+- uses: norcubeplatform/setup-norcube@v1
   with:
     token: ${{ secrets.NORCUBE_TOKEN }}
 - run: nrc langsync sync
@@ -57,7 +57,7 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - uses: norcubeplatform/setup-nrc@v1
+      - uses: norcubeplatform/setup-norcube@v1
         with:
           token: ${{ secrets.NORCUBE_TOKEN }}
       - run: nrc langsync sync
@@ -72,7 +72,7 @@ jobs:
 Fail a nightly job when a restore check of any database didn't pass:
 
 ```yaml
-- uses: norcubeplatform/setup-nrc@v1
+- uses: norcubeplatform/setup-norcube@v1
   with:
     token: ${{ secrets.NORCUBE_TOKEN }} # scope: backup.read
 - run: |
