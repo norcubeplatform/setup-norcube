@@ -1,0 +1,128 @@
+name: Set up the Norcube CLI
+description: Install norcube / nrc from the official GitHub release, verified against its checksums, and optionally sign it in with a CI token.
+author: Norcube
+branding:
+  icon: terminal
+  color: purple
+
+inputs:
+  version:
+    description: CLI version to install, such as "v0.18.0" or "0.18.0", or "latest".
+    required: false
+    default: latest
+  token:
+    description: >-
+      A Norcube CI token (nrc_ci_…), usually `secrets.NORCUBE_TOKEN`. When set,
+      it is exported as NORCUBE_TOKEN for the rest of the job and masked in
+      logs.
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: The installed version, such as "v0.18.0".
+    value: ${{ steps.install.outputs.version }}
+  path:
+    description: Directory that holds norcube and nrc (added to PATH).
+    value: ${{ steps.install.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        REPO: norcubeplatform/cli
+      run: |
+        set -euo pipefail
+
+        case "$RUNNER_OS" in
+          Linux) os=linux ext=tar.gz ;;
+          macOS) os=darwin ext=tar.gz ;;
+          Windows) os=windows ext=zip ;;
+          *) echo "::error::setup-nrc: unsupported runner OS $RUNNER_OS"; exit 1 ;;
+        esac
+        case "$RUNNER_ARCH" in
+          X64) arch=amd64 ;;
+          ARM64) arch=arm64 ;;
+          *) echo "::error::setup-nrc: unsupported runner architecture $RUNNER_ARCH"; exit 1 ;;
+        esac
+        if [ "$os" = windows ] && [ "$arch" != amd64 ]; then
+          echo "::error::setup-nrc: Windows builds are amd64 only"; exit 1
+        fi
+
+        # "latest" follows the release redirect; no API call, no token needed.
+        version="$INPUT_VERSION"
+        if [ "$version" = latest ]; then
+          url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest")
+          version="${url##*/}"
+        fi
+        case "$version" in v*) ;; *) version="v$version" ;; esac
+        if ! printf '%s' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.]+)?$'; then
+          echo "::error::setup-nrc: \"$INPUT_VERSION\" is not a version (use latest or vX.Y.Z)"; exit 1
+        fi
+
+        dir="$RUNNER_TOOL_CACHE/norcube/${version#v}/$arch"
+        bin=norcube; [ "$os" = windows ] && bin=norcube.exe
+        if [ ! -x "$dir/$bin" ]; then
+          tmp=$(mktemp -d)
+          archive="norcube_${os}_${arch}.${ext}"
+          base="https://github.com/$REPO/releases/download/$version"
+          curl -fsSL --retry 3 -o "$tmp/$archive" "$base/$archive"
+          curl -fsSL --retry 3 -o "$tmp/checksums.txt" "$base/checksums.txt"
+
+          # Refuse to install anything that doesn't match the release's
+          # published SHA-256.
+          want=$(awk -v f="$archive" '$2 == f { print $1 }' "$tmp/checksums.txt")
+          if [ -z "$want" ]; then
+            echo "::error::setup-nrc: $archive is not listed in checksums.txt of $version"; exit 1
+          fi
+          if command -v sha256sum >/dev/null; then
+            got=$(sha256sum "$tmp/$archive" | awk '{print $1}')
+          else
+            got=$(shasum -a 256 "$tmp/$archive" | awk '{print $1}')
+          fi
+          if [ "$got" != "$want" ]; then
+            echo "::error::setup-nrc: checksum mismatch for $archive (got $got, want $want)"; exit 1
+          fi
+
+          mkdir -p "$dir"
+          if [ "$ext" = zip ]; then
+            unzip -q -o "$tmp/$archive" "$bin" -d "$dir"
+          else
+            tar -xzf "$tmp/$archive" -C "$dir" "$bin"
+          fi
+          chmod +x "$dir/$bin"
+          if [ "$os" = windows ]; then
+            cp "$dir/$bin" "$dir/nrc.exe"
+          else
+            ln -sf "$bin" "$dir/nrc"
+          fi
+          rm -rf "$tmp"
+        fi
+
+        echo "$dir" >> "$GITHUB_PATH"
+        # CI runs don't need the "new version available" check.
+        echo "NORCUBE_NO_UPDATE_CHECK=1" >> "$GITHUB_ENV"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "path=$dir" >> "$GITHUB_OUTPUT"
+        echo "Installed norcube $version ($os/$arch) to $dir"
+
+    - if: inputs.token != ''
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        echo "::add-mask::$TOKEN"
+        case "$TOKEN" in
+          nrc_ci_*) ;;
+          *) echo "::warning::setup-nrc: the token doesn't look like a Norcube CI token (nrc_ci_…); create one with \`nrc auth ci-token create\` or under IAM › CI tokens." ;;
+        esac
+        {
+          delim="NORCUBE_$(openssl rand -hex 8 2>/dev/null || echo $RANDOM$RANDOM)"
+          echo "NORCUBE_TOKEN<<$delim"
+          echo "$TOKEN"
+          echo "$delim"
+        } >> "$GITHUB_ENV"
